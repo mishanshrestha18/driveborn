@@ -44,6 +44,7 @@ every time you save, download or delete something.
 | Modified < 24 hours ago | **Hot.** Acts twice per round |
 | Largest file in the folder | Floor boss |
 | Thousands of tiny files | Folded into one Swarm body |
+| `.git` `bin` `obj` `node_modules` … | Hidden. Build and tooling folders are not places you recognise, so they never become rooms |
 
 Generation is deterministic: an entity's identity is hashed from
 `path + size + last-write-time`, so the same file is always the same creature — until
@@ -97,6 +98,11 @@ than promised:
 - **No network code exists in the project.** Nothing leaves the machine.
 - **The save file** stores paths and game state — never file contents.
 
+Separately from all of that, a *relevance* filter hides `.git`, `bin`, `obj`,
+`node_modules` and similar from the dungeon. That is cosmetic, not protective — the
+deny-list above is the only thing doing safety work, and the two are kept deliberately
+distinct so relaxing one can never quietly weaken the other.
+
 Run `dotnet test` and look at `tests/Driveborn.Core.Tests/SafetyTests.cs`. If those go red,
 the app should not ship.
 
@@ -113,6 +119,12 @@ dotnet run --project src/Driveborn.App
 
 On first launch, pick one or more folders as Territories. Somewhere with a real history
 works best — a projects folder, a photo archive, an old backup drive.
+
+Your first descent is guided. A coach card walks through the nine things that matter, and
+each card advances when you actually do the thing rather than when you click Next — so the
+lesson is always attached to something you just did. It teaches on your own folder, not a
+sandbox, because *this room is your folder* is the one idea the game rests on. Skip it at
+any time, or replay it later with **How to play** in the hub.
 
 ### Controls
 
@@ -140,6 +152,7 @@ src/
     Combat/            damage maths
     Run/               the descent engine
     Rifts/             daily discovery
+    Tutorial/          the guided first descent (pure state, no WPF)
   Driveborn.Data/      JSON profile persistence, written atomically
   Driveborn.App/       WPF shell
 tests/
@@ -150,9 +163,14 @@ The core has no dependency on WPF, so the whole game is playable and testable he
 
 ## Status
 
-Vertical slice. Everything described above is implemented and tested. Not yet built:
-parser drops and upgrades, vault keys, archive entities splitting into real children,
-the world-map fog-of-war view, and thumbnail rendering for raster relics.
+Vertical slice. Everything described above is implemented and tested (72 tests). The full
+loop has been played end to end: pick a folder, descend, fight, extract, streak.
+
+Not yet built: parser drops and upgrades, vault keys, archive entities splitting into real
+children, the world-map fog-of-war view, and thumbnail rendering for raster relics.
+
+Known rough edges: entities are drawn as single-letter glyphs rather than named tiles, so
+the board needs the inspector to be readable at a glance.
 
 ## Licence
 

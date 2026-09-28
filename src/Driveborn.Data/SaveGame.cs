@@ -44,6 +44,12 @@ public sealed class SaveGame
     public int StreakDays { get; set; }
     public int BestStreakDays { get; set; }
 
+    /// <summary>
+    /// Set once the player has finished (or skipped) the guided first descent.
+    /// The coach can be replayed from the hub at any time.
+    /// </summary>
+    public bool TutorialCompleted { get; set; }
+
     /// <summary>Local date of the last completed run, used for the streak.</summary>
     public DateTime? LastPlayedLocalDate { get; set; }
 

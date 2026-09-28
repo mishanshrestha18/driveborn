@@ -61,7 +61,12 @@ public sealed class RiftService
                 var (path, depth) = queue.Dequeue();
                 inspected++;
 
-                var folders = _probe.EnumerateFolders(path);
+                // Build output and version-control internals change constantly and
+                // would win the Rift lottery every single day, which is both boring
+                // and meaningless to the player.
+                var folders = _probe.EnumerateFolders(path)
+                    .Where(d => !ScanPolicy.IsNoiseFolder(d.Name))
+                    .ToList();
                 var files = _probe.EnumerateFiles(path);
 
                 var newest = DateTime.MinValue;

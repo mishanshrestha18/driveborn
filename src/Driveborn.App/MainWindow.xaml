@@ -126,7 +126,9 @@
                                  BorderBrush="{StaticResource PanelEdge}" Foreground="{StaticResource Ink}"
                                  FontFamily="{StaticResource Mono}" FontSize="11"/>
 
-                        <Button Content="Manage territories" Margin="0,12,0,0" Click="BtnManage_Click"/>
+                        <Button Content="How to play" Margin="0,12,0,0" Click="BtnHowToPlay_Click"
+                                Style="{StaticResource Primary}"/>
+                        <Button Content="Manage territories" Margin="0,8,0,0" Click="BtnManage_Click"/>
                     </StackPanel>
                 </ScrollViewer>
             </Border>
@@ -241,6 +243,30 @@
                                  FontSize="11.5" MouseDoubleClick="DoorList_MouseDoubleClick"/>
                     </Grid>
                 </Grid>
+            </Border>
+            <!-- guided first descent: floats over the board, never blocks it -->
+            <Border x:Name="TutorialCard" Grid.Column="1" Visibility="Collapsed"
+                    VerticalAlignment="Bottom" Margin="26,0,26,58"
+                    Background="#F20E1B22" BorderBrush="{StaticResource Cyan}"
+                    BorderThickness="1" CornerRadius="4" Padding="16,13">
+                <StackPanel>
+                    <Grid>
+                        <TextBlock x:Name="TutorialTitle" Style="{StaticResource Body}"
+                                   FontWeight="Bold" Foreground="{StaticResource Cyan}"/>
+                        <TextBlock x:Name="TutorialProgress" Style="{StaticResource Label}"
+                                   HorizontalAlignment="Right"/>
+                    </Grid>
+                    <TextBlock x:Name="TutorialBody" Style="{StaticResource Body}"
+                               Margin="0,7,0,0" LineHeight="18"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,11,0,0">
+                        <Button x:Name="BtnTutorialNext" Content="Next" Click="BtnTutorialNext_Click"
+                                Style="{StaticResource Primary}"/>
+                        <Button Content="Skip tutorial" Margin="8,0,0,0" Click="BtnTutorialSkip_Click"/>
+                        <TextBlock x:Name="TutorialHint" Style="{StaticResource Label}"
+                                   VerticalAlignment="Center" Margin="12,0,0,0"
+                                   Foreground="{StaticResource Amber}"/>
+                    </StackPanel>
+                </StackPanel>
             </Border>
         </Grid>
 

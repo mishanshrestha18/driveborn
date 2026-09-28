@@ -40,8 +40,30 @@ public sealed class ScanPolicy
         @"credentials|\.npmrc|\.netrc|secrets?\..*|.*\.kdbx)$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    /// <summary>
+    /// Folder names that are hidden from the dungeon. These are not a security
+    /// boundary - they are a relevance filter. Version control internals, build
+    /// output and package caches are not places a player recognises, and a room
+    /// full of them reads as meaningless noise rather than as their own drive.
+    /// </summary>
+    private static readonly HashSet<string> NoiseFolders = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".git", ".hg", ".svn", ".vs", ".idea", ".vscode",
+        "bin", "obj", "node_modules", "packages", "vendor",
+        "dist", "build", "out", "target", "__pycache__", ".pytest_cache",
+        ".venv", "venv", "env", ".tox", ".gradle", ".next", ".nuxt", ".cache",
+        "graphify-out", ".claude", "testresults"
+    };
+
     /// <summary>Folders the user has opted in to. Empty means nothing is scannable.</summary>
     public IReadOnlyList<string> Territories => _territories;
+
+    /// <summary>
+    /// True when a folder is build or tooling noise that should not become a room.
+    /// Unlike <see cref="IsDeniedFolder"/> this is about making the dungeon feel
+    /// like the player's own drive, not about safety.
+    /// </summary>
+    public static bool IsNoiseFolder(string folderName) => NoiseFolders.Contains(folderName);
 
     /// <summary>Max folder depth walked below a territory root.</summary>
     public int MaxDepth { get; init; } = 12;

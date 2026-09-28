@@ -54,6 +54,7 @@ public sealed class TerritoryScanner
 
         var folders = _probe.EnumerateFolders(full)
             .Where(d => Depth(d.FullPath) <= _policy.MaxDepth)
+            .Where(d => !ScanPolicy.IsNoiseFolder(d.Name))
             .OrderByDescending(d => d.EntryCount)
             .ToList();
 

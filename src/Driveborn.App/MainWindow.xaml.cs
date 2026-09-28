@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using Driveborn.Core.Tutorial;
 using Driveborn.Core.Model;
 using Driveborn.Core.Rifts;
 using Driveborn.Core.Run;
@@ -15,6 +16,7 @@ public partial class MainWindow : Window
     private const double Cell = 34;
 
     private readonly GameSession _session = new();
+    private readonly TutorialCoach _coach = new();
     private Entity? _selected;
     private IReadOnlyList<Rift> _rifts = Array.Empty<Rift>();
 
@@ -23,6 +25,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         Loaded += OnLoaded;
         KeyDown += OnKeyDown;
+        _coach.Changed += RenderTutorial;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -255,6 +258,80 @@ public partial class MainWindow : Window
 
         _selected = null;
         ShowDescent();
+
+        // First descent is guided. The coach teaches on the player's own folder
+        // rather than a sandbox, because "this room is your folder" is the one
+        // idea the whole game rests on.
+        if (!_session.Save.TutorialCompleted) _coach.Start();
+        RenderTutorial();
+        _coach.Notify(TutorialTrigger.DescentStarted);
+    }
+
+    // ================= tutorial =================
+
+    private void RenderTutorial()
+    {
+        if (_coach.Current is not { } step)
+        {
+            TutorialCard.Visibility = Visibility.Collapsed;
+
+            if (_coach.IsFinished && !_session.Save.TutorialCompleted)
+            {
+                _session.Save.TutorialCompleted = true;
+                _session.Persist();
+            }
+            return;
+        }
+
+        TutorialCard.Visibility = Visibility.Visible;
+        TutorialTitle.Text = step.Title;
+        TutorialBody.Text = step.Body;
+        TutorialProgress.Text = $"{_coach.StepNumber} / {_coach.StepCount}";
+        TutorialHint.Text = HintFor(step);
+    }
+
+    private static string HintFor(TutorialStep step)
+    {
+        if (step.IsManual) return string.Empty;
+
+        return step.AdvanceOn[0] switch
+        {
+            TutorialTrigger.Moved => "waiting: take a step",
+            TutorialTrigger.Selected => "waiting: click a square",
+            TutorialTrigger.Struck => "waiting: press 1, 2 or 3 next to something",
+            TutorialTrigger.StruckMatched => "waiting: land a matched hit (or press Next)",
+            TutorialTrigger.Extracted => "waiting: press X at the starting folder",
+            TutorialTrigger.TurnEnded => "waiting: end your turn",
+            _ => string.Empty
+        };
+    }
+
+    private void BtnTutorialNext_Click(object sender, RoutedEventArgs e) => _coach.Advance();
+
+    private void BtnTutorialSkip_Click(object sender, RoutedEventArgs e)
+    {
+        _coach.Stop();
+        _session.Save.TutorialCompleted = true;
+        _session.Persist();
+        RenderTutorial();
+    }
+
+    private void BtnHowToPlay_Click(object sender, RoutedEventArgs e)
+    {
+        _session.Save.TutorialCompleted = false;
+        _session.Persist();
+
+        MessageBox.Show(this,
+            "Driveborn in six lines:" + Environment.NewLine + Environment.NewLine +
+            "1. The grid is one real folder. Every square on it is one real file." + Environment.NewLine +
+            "2. Move with WASD. Click a square to see the actual file behind it." + Environment.NewLine +
+            "3. Press 1, 2 or 3 to attack. Each hit costs cycles; at zero your turn ends." + Environment.NewLine +
+            "4. A parser that matches the file type ignores armour and hits ~6x harder." + Environment.NewLine +
+            "5. Orange squares on the walls are subfolders. Step on one to go deeper." + Environment.NewLine +
+            "6. Walk back to where you started and press X to keep what you are carrying." +
+            Environment.NewLine + Environment.NewLine +
+            "The guided tutorial will run again on your next descent.",
+            "How to play", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     // ================= descent =================
@@ -592,6 +669,7 @@ public partial class MainWindow : Window
         InspectorText.Text = Describe(entity);
         RenderRoom();
         RenderHud();
+        _coach.Notify(TutorialTrigger.Selected);
     }
 
     // ================= input =================
@@ -603,10 +681,10 @@ public partial class MainWindow : Window
 
         switch (e.Key)
         {
-            case Key.W or Key.Up: Act(_session.Engine.Move(0, -1)); break;
-            case Key.S or Key.Down: Act(_session.Engine.Move(0, 1)); break;
-            case Key.A or Key.Left: Act(_session.Engine.Move(-1, 0)); break;
-            case Key.D or Key.Right: Act(_session.Engine.Move(1, 0)); break;
+            case Key.W or Key.Up: Act(_session.Engine.Move(0, -1), TutorialTrigger.Moved); break;
+            case Key.S or Key.Down: Act(_session.Engine.Move(0, 1), TutorialTrigger.Moved); break;
+            case Key.A or Key.Left: Act(_session.Engine.Move(-1, 0), TutorialTrigger.Moved); break;
+            case Key.D or Key.Right: Act(_session.Engine.Move(1, 0), TutorialTrigger.Moved); break;
 
             case Key.D1: StrikeWith(0); break;
             case Key.D2: StrikeWith(1); break;
@@ -616,8 +694,8 @@ public partial class MainWindow : Window
                 if (_selected is not null) Act(_session.Engine.Open(_selected));
                 break;
 
-            case Key.Space: Act(_session.Engine.EndTurn()); break;
-            case Key.X: Act(_session.Engine.Extract()); break;
+            case Key.Space: Act(_session.Engine.EndTurn(), TutorialTrigger.TurnEnded); break;
+            case Key.X: Act(_session.Engine.Extract(), TutorialTrigger.Extracted); break;
             case Key.Tab: CycleTarget(); e.Handled = true; break;
         }
     }
@@ -629,7 +707,20 @@ public partial class MainWindow : Window
             CycleTarget();
             if (_selected is null) return;
         }
-        Act(_session.Engine.Strike(slot, _selected!));
+
+        var target = _selected!;
+        // Captured before the strike resolves: once the target dies it is cleared
+        // from the selection, and the coach still needs to know what happened.
+        var matched = _session.Run?.Player.ParserInSlot(slot)?.Matches(target.Class) ?? false;
+
+        var result = _session.Engine.Strike(slot, target);
+        Act(result);
+
+        if (!result.Ok) return;
+
+        _coach.Notify(TutorialTrigger.Struck);
+        if (matched) _coach.Notify(TutorialTrigger.StruckMatched);
+        if (!target.IsAlive) _coach.Notify(TutorialTrigger.Killed);
     }
 
     /// <summary>Selects the nearest live hostile, then walks through the rest.</summary>
@@ -648,19 +739,30 @@ public partial class MainWindow : Window
         SelectEntity(candidates[index]);
     }
 
-    private void Act(ActionResult result)
+    private void Act(ActionResult result, TutorialTrigger? trigger = null)
     {
         if (!result.Ok && !string.IsNullOrWhiteSpace(result.Message))
             _session.Run?.Say(result.Message);
 
-        if (_selected is { IsAlive: false }) _selected = null;
+        if (_selected is { IsAlive: false })
+        {
+            // Clear the inspector too, otherwise it keeps describing a corpse at
+            // full health, which reads as a bug the first time you see it.
+            _selected = null;
+            InspectorText.Text = "Hover or select anything on the grid. The game always shows you the " +
+                                 "real file behind it.";
+        }
 
         RefreshAll();
+
+        if (result.Ok && trigger is { } t) _coach.Notify(t);
     }
 
-    private void BtnEndTurn_Click(object sender, RoutedEventArgs e) => Act(_session.Engine.EndTurn());
+    private void BtnEndTurn_Click(object sender, RoutedEventArgs e) =>
+        Act(_session.Engine.EndTurn(), TutorialTrigger.TurnEnded);
 
-    private void BtnExtract_Click(object sender, RoutedEventArgs e) => Act(_session.Engine.Extract());
+    private void BtnExtract_Click(object sender, RoutedEventArgs e) =>
+        Act(_session.Engine.Extract(), TutorialTrigger.Extracted);
 
     private void BtnAbandon_Click(object sender, RoutedEventArgs e)
     {
@@ -718,8 +820,23 @@ public partial class MainWindow : Window
             : "The haul is gone. XP and everything you mapped are kept.");
 
         if (run.Outcome == RunOutcome.Extracted && _session.Save.StreakDays > 0)
-            lines.Add($"Streak is now {_session.Save.StreakDays} days.");
+        {
+            var days = _session.Save.StreakDays;
+            lines.Add($"Streak is now {days} {(days == 1 ? "day" : "days")}.");
+        }
 
+        // The summary covers the board, so any coach card still open would be
+        // hidden behind it. Fold the last lesson into the summary instead.
+        if (_coach.Current is { } step)
+        {
+            lines.Add(string.Empty);
+            lines.Add(step.Title + " - " + step.Body);
+            _coach.Stop();
+            _session.Save.TutorialCompleted = true;
+            _session.Persist();
+        }
+
+        TutorialCard.Visibility = Visibility.Collapsed;
         SummaryBody.Text = string.Join(Environment.NewLine, lines);
         SummaryOverlay.Visibility = Visibility.Visible;
     }
